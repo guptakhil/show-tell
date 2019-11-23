@@ -347,3 +347,32 @@ train_data_loader = get_data_loader(
     data_transforms=get_data_transforms(),
     parameter_dict=parameter_dict,
     vocabulary=vocabulary)
+
+
+class Resnet(nn.Module):
+    ''' Class for defining the CNN architecture implemetation'''
+    def __init__(self):
+        super(Resnet, self).__init__()
+        self.resultant_features  = 80
+        #Loading the pretrained Resnet model on ImageNet dataset
+        #We tried Resnet50/101/152 as architectures
+        resnet_model = models.resnet101(pretrained=True)
+        self.model = nn.Sequential(*list(resnet_model.children())[:-1])
+        #Training only the last 2 layers for the Resnet model i.e. linear and batchnorm layer
+        self.linear_secondlast_layer = nn.Linear(resnet_model.fc.in_features, self.resultant_features)
+        #Last layer is the 1D batch norm layer
+        self.last_layer = nn.BatchNorm1d(self.resultant_features, momentum=0.01)
+        #Initializing the weights using normal distribution
+        self.linear_secondlast_layer.weight.data.normal_(0,0.05)
+        self.linear_secondlast_layer.bias.data.fill_(0)
+
+    def forward(self, input_x):
+        ''' Defining the forward pass of the CNN architecture model'''
+        input_x = self.model(input_x)
+        #Converting to a pytorch variable
+        input_x = Variable(input_x.data)
+        #Flattening the output of the CNN model
+        input_x = input_x.view(input_x.size(0), -1)
+        #Applying the linear layer
+        input_x = self.last_layer(self.linear_secondlast_layer(input_x))
+        return input_x
