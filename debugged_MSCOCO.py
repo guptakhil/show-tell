@@ -1,19 +1,38 @@
 '''
 Prerequisite files:
 
-go to:
-http://cocodataset.org/#download
+1) MSCOCO
+    go to:
+    http://cocodataset.org/#download
 
-download and unzip:
-- 2014 Train images
-- 2014 Val images
-- 2014 Train/Val annotations
+    download and unzip:
+    - 2014 Train images
+    - 2014 Val images
+    - 2014 Train/Val annotations
 
-place in this file structure:
-./data/COCO/annotations/ --> all .json files
-./data/COCO/train2014/ --> all train images
-./data/COCO/val2014/ --> all test (val) images
-./output/COCO
+    have this file structure and directories:
+    ./data/COCO/annotations/ --> all .json files
+    ./data/COCO/train2014/ --> all train images
+    ./data/COCO/val2014/ --> all test (val) images
+    ./output/COCO
+
+2) Flickr30k
+    go to:
+    http://shannon.cs.illinois.edu/DenotationGraph/data/index.html
+
+    download and unzip:
+    - Flickr 30k images
+    - Publicly Distributable Version of the Flickr 30k Dataset
+      (tokenized captions only)
+
+    rename:
+    - flickr30k-images --> train
+    - results_20130124.token --> captions.tsv
+
+    have this file structure and directories:
+    ./data/Flickr/annotations/captions.tsv
+    ./data/Flickr/train
+    ./output/Flickr
 
 ---------------------------------
 
@@ -52,8 +71,8 @@ import time
 dir_path = os.path.dirname(os.path.realpath(__file__))
 os.chdir(dir_path)
 
-# Defining the dictionary for the needed paths and parameters
-parameter_dict = {
+# Defining the needed paths and parameters for MSCOCO
+parameter_dict_MSCOCO = {
     # Data Loader Parameters:
     'batch_size': 32,
     'shuffle': True,
@@ -74,7 +93,32 @@ parameter_dict = {
     'train_img_dir': 'train2014',
     # Directory name for the validation images in the MSCOCO dataset
     'test_img_dir': 'val2014',
+}
 
+# Defining the needed paths and parameters for Flickr
+parameter_dict_Flickr = {
+    # Data Loader Parameters:
+    'batch_size': 32,
+    'shuffle': True,
+    'num_workers': 0,
+
+    # Directory Info:
+    # Flickr dataset: stores annotations and images
+    'data_dir': './data/Flickr',
+    # Flickr output: Stores model checkpoints and vocab
+    'output_dir': './output/Flickr',
+    # Path for Flickr training captions from 'data_dir'
+    'train_ann_path': 'annotations/captions.tsv',
+    # Path for Flickr validation captions from 'data_dir'
+    # 'val_ann_path': 'annotations/val_annotations.tsv',
+    # Path for Flickr test captions from 'data_dir'
+    # 'test_ann_path': 'annotations/test_annotations.tsv',
+    # Vocabulary file name
+    'vocabulary_path': 'vocab.pkl',
+    # Directory name for the training images in the Flickr dataset
+    'train_img_dir': 'train',
+    # Directory name for the validation images in the Flickr dataset
+    'test_img_dir': 'train',
     # Add word to vocabulary only if it appears at least this many times
     'vocab_threshold': 5}
 
@@ -111,41 +155,6 @@ class DatasetVocabulary(object):
         return '<end>'
 
 
-# Function for creating the vocabulary for the MSCOCO dataset
-def creating_vocabulary(json_file):
-
-    coco_json = COCO(json_file)
-    vocab_word_ids = coco_json.anns.keys()
-    cnt = Counter()
-    for index, word_id in enumerate(vocab_word_ids):
-        # Converting all the words to lower case and tokenizing them
-        captions_tokens = nltk.tokenize.word_tokenize(
-            str(coco_json.anns[word_id]['caption']).lower())
-        cnt.update(captions_tokens)
-
-    # We only consider the words which appear more than a particular threshold
-    vocabulary_words = []
-    for vocab_word, vocab_word_count in cnt.items():
-        if vocab_word_count >= parameter_dict['vocab_threshold']:
-            vocabulary_words.append(vocab_word)
-
-    vocabulary_dataset = DatasetVocabulary()
-    vocabulary_dataset.adding_new_word('<pad>')
-    vocabulary_dataset.adding_new_word('<start>')
-    vocabulary_dataset.adding_new_word('<end>')
-    vocabulary_dataset.adding_new_word('<unk>')
-
-    for index, vocab_word in enumerate(vocabulary_words):
-        vocabulary_dataset.adding_new_word(vocab_word)
-    return vocabulary_dataset
-
-
-# Defining the path for the vocabulary
-vocabulary_path = os.path.join(
-    parameter_dict['output_dir'],
-    parameter_dict['vocabulary_path'])
-
-
 # Loading the vocabulary from the vocabulary file
 def get_vocab(vocabulary_path):
 
@@ -153,13 +162,12 @@ def get_vocab(vocabulary_path):
         # If the file is already craeted and exists, open
         with open(vocabulary_path, 'rb') as f:
             vocabulary = pickle.load(f)
-            print('Vocabulary is loaded from the pickle file')
+            print('Vocabulary is exists and is loaded.')
     else:
         # Else create the vocabulary file
-        vocabulary = creating_vocabulary(json_file=os.path.join(
-            parameter_dict['data_dir'], parameter_dict['train_ann_path']))
-        with open(vocabulary_path, 'wb') as f:
-            pickle.dump(vocabulary, f)
+        print('Vocabulary does not exist. Creating vocab...')
+        create_vocabulary(MSCOCO_build = 1, Flickr_build = 0)
+        vocabulary = get_vocab(vocabulary_path)
 
     return vocabulary
 
@@ -333,22 +341,6 @@ def create_caption_word_format(tokenized_version, dataset_vocabulary):
     return ' '.join(caption_word_format_list)
 
 
-# Defining the vocabulary
-vocabulary = get_vocab(vocabulary_path)
-
-# Loading the train loader
-train_data_loader = get_data_loader(
-    annotations_path=os.path.join(
-        parameter_dict['data_dir'],
-        parameter_dict['train_ann_path']),
-    data_path=os.path.join(
-        parameter_dict['data_dir'],
-        parameter_dict['train_img_dir']),
-    data_transforms=get_data_transforms(),
-    parameter_dict=parameter_dict,
-    vocabulary=vocabulary)
-
-
 class Resnet(nn.Module):
     ''' Class for defining the CNN architecture implemetation'''
     def __init__(self):
@@ -376,3 +368,29 @@ class Resnet(nn.Module):
         #Applying the linear layer
         input_x = self.last_layer(self.linear_secondlast_layer(input_x))
         return input_x
+
+def main():
+    parameter_dict = parameter_dict_MSCOCO
+    
+    # Defining the path for the vocabulary
+    vocabulary_path = os.path.join(
+        parameter_dict['output_dir'],
+        parameter_dict['vocabulary_path'])
+
+    # Defining the vocabulary
+    vocabulary = get_vocab(vocabulary_path)
+
+    # Loading the train loader
+    train_data_loader = get_data_loader(
+        annotations_path=os.path.join(
+            parameter_dict['data_dir'],
+            parameter_dict['train_ann_path']),
+        data_path=os.path.join(
+            parameter_dict['data_dir'],
+            parameter_dict['train_img_dir']),
+        data_transforms=get_data_transforms(),
+        parameter_dict=parameter_dict,
+        vocabulary=vocabulary)
+
+if __name__ == "__main__":
+    main()
