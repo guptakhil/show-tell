@@ -37,9 +37,9 @@ Prerequisite files:
 -------------------------------------------------------
 HOW TO USE THIS FILE
 
-call vocab_builder.main() from your file
+call vocab_builder.create_vocabulary() from your file
 
-main() takes 2 arguments:
+create_vocabulary() takes 2 arguments:
 1) MSCOCO_build = 1
 2) Flickr_build = 1
 
@@ -201,7 +201,7 @@ def creating_vocabulary_Flickr(json_file, parameter_dict):
     return vocabulary_dataset
 
 
-def main(MSCOCO_build=1, Flikr_build=1):
+def create_vocabulary(MSCOCO_build=1, Flickr_build=1):
     if MSCOCO_build == 1:
         parameter_dict = parameter_dict_MSCOCO
 
@@ -221,7 +221,7 @@ def main(MSCOCO_build=1, Flikr_build=1):
         with open(vocabulary_path, 'wb') as f:
             pickle.dump(vocabulary, f)
 
-    if Flikr_build == 1:
+    if Flickr_build == 1:
         parameter_dict = parameter_dict_Flickr
 
         # Path to vocab
@@ -239,7 +239,3 @@ def main(MSCOCO_build=1, Flikr_build=1):
         # Save vocab
         with open(vocabulary_path, 'wb') as f:
             pickle.dump(vocabulary, f)
-
-
-if __name__ == "__main__":
-    main()
