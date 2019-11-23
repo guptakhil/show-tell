@@ -20,7 +20,7 @@ place in this file structure:
 This doc is missing:
 
 1) RNN Class
-2) ResNet Class
+
 3) Checkpoint function
 4) Trainig loop and parameters
 '''
