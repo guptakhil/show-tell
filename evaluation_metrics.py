@@ -1,12 +1,15 @@
 # The core part of code was taken from https://github.com/tylin/coco-caption
 
 import copy
-import sys, math, re, os
+#import sys, re 
+import math, os
 from collections import defaultdict
 import numpy as np
-import pdb
+#import pdb
 import subprocess
 import threading
+import tempfile
+#import itertools
 
 def bleu_precook(s, n=4):
     '''Count all the n-grams in a sentence.
@@ -18,10 +21,10 @@ def bleu_precook(s, n=4):
     '''
     words = s.split()
     counts = defaultdict(int)
-    for k in xrange(1,n+1):
-        for i in xrange(len(words)-k+1):
+    for k in range(1,n+1):
+        for i in range(len(words)-k+1):
             ngram = tuple(words[i:i+k])
-            counts[ngram] += 1
+            counts[ngram] += 1   
     return (len(words), counts)
 
 def bleu_cook_refs(refs, n=4):
@@ -35,22 +38,26 @@ def bleu_cook_refs(refs, n=4):
     reflen = []
     maxcounts = {}
     for ref in refs:
-        rl, counts = bleu_precook(ref, n)
-        reflen.append(rl)
-        for (ngram,count) in counts.iteritems():
+        precooked = bleu_precook(ref, n)
+        rl = precooked[0]
+        counts = precooked[1]        
+        reflen.append(rl)       
+        for (ngram,count) in counts.items():
             maxcounts[ngram] = max(maxcounts.get(ngram,0), count)
     return (reflen, maxcounts)
 
-def bleu_cook_test(test, (reflen, refmaxcounts), eff=None, n=4):
+def bleu_cook_test(test, tup, eff=None, n=4):
     '''Transform a test sentence as a string (together with the cooked reference sentences) into a form usable by BleuScorer.
     Args:
         test: A test sentence.
-        (reflen, refmaxcounts): Cooked reference sentences from bleu_cook_refs().
+        tup: Cooked reference sentences from bleu_cook_refs().
         eff: Whether and how to calculate effective reference sentence length. "average", "shortest", or "closest".
         n: The max length of n-grams.
     Returns:
         Result usable by BleuScorer.
     '''
+    reflen = tup[0]
+    refmaxcounts = tup[1] 
     testlen, counts = bleu_precook(test, n)
     result = {}
     if eff == "closest":
@@ -59,10 +66,12 @@ def bleu_cook_test(test, (reflen, refmaxcounts), eff=None, n=4):
         result["reflen"]  = min(reflen)
     elif eff == "average":
         result["reflen"]  = float(sum(reflen))/len(reflen)
+    else:
+        result["reflen"] = reflen
     result["testlen"] = testlen
-    result["guess"] = [max(0,testlen-k+1) for k in xrange(1,n+1)]
+    result["guess"] = [max(0,testlen-k+1) for k in range(1,n+1)]
     result["correct"] = [0]*n
-    for (ngram, count) in counts.iteritems():
+    for (ngram, count) in counts.items():
         result["correct"][len(ngram)-1] += min(refmaxcounts.get(ngram,0), count)
     return result
 
@@ -76,8 +85,8 @@ def cider_precook(s, n=4):
     '''
     words = s.split()
     counts = defaultdict(int)
-    for k in xrange(1,n+1):
-        for i in xrange(len(words)-k+1):
+    for k in range(1,n+1):
+        for i in range(len(words)-k+1):
             ngram = tuple(words[i:i+k])
             counts[ngram] += 1
     return counts
@@ -232,40 +241,40 @@ class BleuScorer(object):
             self._reflen += reflen
                 
             for key in ['guess','correct']:
-                for k in xrange(n):
+                for k in range(n):
                     totalcomps[key][k] += comps[key][k]
 
             # append per image bleu score
             bleu = 1.
-            for k in xrange(n):
+            for k in range(n):
                 bleu *= (float(comps['correct'][k]) + tiny) \
                         /(float(comps['guess'][k]) + small)
                 bleu_list[k].append(bleu ** (1./(k+1)))
             ratio = (testlen + tiny) / (reflen + small) ## N.B.: avoid zero division
             if ratio < 1:
-                for k in xrange(n):
+                for k in range(n):
                     bleu_list[k][-1] *= math.exp(1 - 1/ratio)
 
             if verbose > 1:
-                print comps, reflen
+                print(comps, reflen)
 
         totalcomps['reflen'] = self._reflen
         totalcomps['testlen'] = self._testlen
 
         bleus = []
         bleu = 1.
-        for k in xrange(n):
+        for k in range(n):
             bleu *= float(totalcomps['correct'][k] + tiny) \
                     / (totalcomps['guess'][k] + small)
             bleus.append(bleu ** (1./(k+1)))
         ratio = (self._testlen + tiny) / (self._reflen + small) ## N.B.: avoid zero division
         if ratio < 1:
-            for k in xrange(n):
+            for k in range(n):
                 bleus[k] *= math.exp(1 - 1/ratio)
 
         if verbose > 0:
-            print totalcomps
-            print "ratio:", ratio
+            print (totalcomps)
+            print ("ratio:", ratio)
 
         self._score = bleus
         return self._score, bleu_list
@@ -360,7 +369,7 @@ class CiderScorer(object):
         '''
         for refs in self.crefs:
             # refs, k ref captions of one image
-            for ngram in set([ngram for ref in refs for (ngram,count) in ref.iteritems()]):
+            for ngram in set([ngram for ref in refs for (ngram,count) in ref.items()]):
                 self.document_frequency[ngram] += 1
             # maxcounts[ngram] = max(maxcounts.get(ngram,0), count)
 
@@ -376,7 +385,7 @@ class CiderScorer(object):
             vec = [defaultdict(float) for _ in range(self.n)]
             length = 0
             norm = [0.0 for _ in range(self.n)]
-            for (ngram,term_freq) in cnts.iteritems():
+            for (ngram,term_freq) in cnts.items():
                 # give word count 1 if it doesn't appear in reference corpus
                 df = np.log(max(1.0, self.document_frequency[ngram]))
                 # ngram index
@@ -407,7 +416,7 @@ class CiderScorer(object):
             val = np.array([0.0 for _ in range(self.n)])
             for n in range(self.n):
                 # ngram
-                for (ngram,count) in vec_hyp[n].iteritems():
+                for (ngram,count) in vec_hyp[n].items():
                     # vrama91 : added clipping
                     val[n] += min(vec_hyp[n][ngram], vec_ref[n][ngram]) * vec_ref[n][ngram]
 
@@ -453,43 +462,43 @@ class CiderScorer(object):
         return np.mean(np.array(score)), np.array(score)
 
 class Cider:
-def __init__(self, test=None, refs=None, n=4, sigma=6.0):
-    # set cider to sum over 1 to 4-grams
-    self._n = n
-    # set the standard deviation parameter for gaussian penalty
-    self._sigma = sigma
-
-def compute_score(self, gts, res):
-    '''
-    Main function to compute CIDEr score
-    :param  hypo_for_image (dict) : dictionary with key <image> and value <tokenized hypothesis / candidate sentence>
-            ref_for_image (dict)  : dictionary with key <image> and value <tokenized reference sentence>
-    :return: cider (float) : computed CIDEr score for the corpus
-    '''
-
-    assert(gts.keys() == res.keys())
-    imgIds = gts.keys()
-
-    cider_scorer = CiderScorer(n=self._n, sigma=self._sigma)
-
-    for id in imgIds:
-        hypo = res[id]
-        ref = gts[id]
-
-        # Sanity check.
-        assert(type(hypo) is list)
-        assert(len(hypo) == 1)
-        assert(type(ref) is list)
-        assert(len(ref) > 0)
-
-        cider_scorer += (hypo[0], ref)
-
-    (score, scores) = cider_scorer.compute_score()
-
-    return score, scores
-
-def method(self):
-    return "CIDEr"
+    def __init__(self, test=None, refs=None, n=4, sigma=6.0):
+        # set cider to sum over 1 to 4-grams
+        self._n = n
+        # set the standard deviation parameter for gaussian penalty
+        self._sigma = sigma
+    
+    def compute_score(self, gts, res):
+        '''
+        Main function to compute CIDEr score
+        :param  hypo_for_image (dict) : dictionary with key <image> and value <tokenized hypothesis / candidate sentence>
+                ref_for_image (dict)  : dictionary with key <image> and value <tokenized reference sentence>
+        :return: cider (float) : computed CIDEr score for the corpus
+        '''
+    
+        assert(gts.keys() == res.keys())
+        imgIds = gts.keys()
+    
+        cider_scorer = CiderScorer(n=self._n, sigma=self._sigma)
+    
+        for id in imgIds:
+            hypo = res[id]
+            ref = gts[id]
+    
+            # Sanity check.
+            assert(type(hypo) is list)
+            assert(len(hypo) == 1)
+            assert(type(ref) is list)
+            assert(len(ref) > 0)
+    
+            cider_scorer += (hypo[0], ref)
+    
+        (score, scores) = cider_scorer.compute_score()
+    
+        return score, scores
+    
+    def method(self):
+        return "CIDEr"
 
 
 # Assumes meteor-1.5.jar is in the same directory as meteor.py.  Change as needed.
@@ -654,3 +663,139 @@ class Rouge():
 
     def method(self):
         return "Rouge"
+
+# path to the stanford corenlp jar
+STANFORD_CORENLP_3_4_1_JAR = 'stanford-corenlp-3.4.1.jar'
+
+# punctuations to be removed from the sentences
+PUNCTUATIONS = ["''", "'", "``", "`", "-LRB-", "-RRB-", "-LCB-", "-RCB-", \
+        ".", "?", "!", ",", ":", "-", "--", "...", ";"] 
+
+class PTBTokenizer:
+    """Python wrapper of Stanford PTBTokenizer"""
+
+    def tokenize(self, captions_for_image):
+        cmd = ['java', '-cp', STANFORD_CORENLP_3_4_1_JAR, \
+                'edu.stanford.nlp.process.PTBTokenizer', \
+                '-preserveLines', '-lowerCase']
+
+        # prepare data for PTB Tokenizer
+        final_tokenized_captions_for_image = {}
+        image_id = [k for k, v in captions_for_image.items() for _ in range(len(v))]
+        sentences = '\n'.join([c.replace('\n', ' ') for k, v in captions_for_image.items() for c in v])
+
+
+        # save sentences to temporary file 
+        path_to_jar_dirname=os.path.dirname(os.path.abspath(__file__))
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, dir=path_to_jar_dirname)
+        tmp_file.write(sentences.encode())
+        tmp_file.close()
+
+        # tokenize sentence
+        cmd.append(os.path.basename(tmp_file.name))
+        p_tokenizer = subprocess.Popen(cmd, cwd=path_to_jar_dirname, \
+                stdout=subprocess.PIPE)
+        token_lines = p_tokenizer.communicate(input=sentences.rstrip())[0]
+        lines = token_lines.split('\n')
+        # remove temp file
+        os.remove(tmp_file.name)
+
+        # create dictionary for tokenized captions
+        for k, line in zip(image_id, lines):
+            if not k in final_tokenized_captions_for_image:
+                final_tokenized_captions_for_image[k] = []
+            tokenized_caption = ' '.join([w for w in line.rstrip().split(' ') \
+                    if w not in PUNCTUATIONS])
+            final_tokenized_captions_for_image[k].append(tokenized_caption)
+
+        return final_tokenized_captions_for_image
+    
+class COCOEvalCap:
+    def __init__(self, coco, cocoRes):
+        self.evalImgs = []
+        self.eval = {}
+        self.imgToEval = {}
+        self.coco = coco
+        self.cocoRes = cocoRes
+        self.params = {'image_id': coco.getImgIds()}
+
+    def evaluate(self):
+        imgIds = self.params['image_id']
+        # imgIds = self.coco.getImgIds()
+        gts = {}
+        res = {}
+        for imgId in imgIds:
+            gts[imgId] = self.coco.imgToAnns[imgId]
+            res[imgId] = self.cocoRes.imgToAnns[imgId]
+
+        print ('tokenization...')
+        tokenizer = PTBTokenizer()
+        gts  = tokenizer.tokenize(gts)
+        res = tokenizer.tokenize(res)
+        
+        print('setting up scorers...')
+        scorers = [
+            (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+            (Meteor(),"METEOR"),
+            (Rouge(), "ROUGE_L"),
+            (Cider(), "CIDEr")
+        ]
+        
+        # Compute scores
+        for scorer, method in scorers:
+            print ('computing %s score...'%(scorer.method()))
+            score, scores = scorer.compute_score(gts, res)
+            if type(method) == list:
+                for sc, scs, m in zip(score, scores, method):
+                    self.setEval(sc, m)
+                    self.setImgToEvalImgs(scs, gts.keys(), m)
+                    print ("%s: %0.3f"%(m, sc))
+            else:
+                self.setEval(score, method)
+                self.setImgToEvalImgs(scores, gts.keys(), method)
+                print ("%s: %0.3f"%(method, score))
+        self.setEvalImgs()
+
+    def setEval(self, score, method):
+        self.eval[method] = score
+
+    def setImgToEvalImgs(self, scores, imgIds, method):
+        for imgId, score in zip(imgIds, scores):
+            if not imgId in self.imgToEval:
+                self.imgToEval[imgId] = {}
+                self.imgToEval[imgId]["image_id"] = imgId
+            self.imgToEval[imgId][method] = score
+
+    def setEvalImgs(self):
+        self.evalImgs = [eval for imgId, eval in self.imgToEval.items()]
+        
+        
+
+if __name__ == "__main__":
+
+    ref_dict = dict() ## a dict from image id to a list of string sentences 
+    cand_dict = dict() ## a dict from image id to a list of string sentences
+      
+    ref_dict['img1'] = ["A large bus.",
+            "A very tall building.",
+            "A bus sitting next to a  tall building.", 
+            "What a nice day!",
+            "A dog running on the road."]   ## five reference sentences
+    ref_dict['img2'] = ["A messy bedroom.",
+            "A room in dorm.",
+            "A bed next to a shelf.", 
+            "A sunday morning.", 
+            "Girls sitting on a bed."] 
+    cand_dict['img1'] = ["A large bus"]
+    cand_dict['img2'] = ["Nothing correct"]
+    
+    
+    # check whether the keys of the two dicts are the same
+    assert set(ref_dict.keys()) == set(cand_dict.keys()), "The keys of two dicts are different!"
+    
+    # compute bleu-4 score
+    bleu = Bleu(4)
+    bleu.compute_score(ref_dict, cand_dict)
+    
+
+ 
