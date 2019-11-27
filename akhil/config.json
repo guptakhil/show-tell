@@ -16,7 +16,12 @@
 		"num_layers" : 5,
 		"batch_size" : 32,
 		"shuffle" : 1,
-		"num_workers" : 0 
+		"num_workers" : 0,
+		"resume_training" : 0,
+		"resume_model_train" : "model_1",
+		"is_training" : 1,
+		"is_testing" : 0,
+		"load_model_test" : "model_50"
 	},
 	"Flickr" : {
 		"data_dir" : "./data/Flickr",
@@ -35,6 +40,11 @@
 		"num_layers" : 5,
 		"batch_size" : 32,
 		"shuffle" : 1,
-		"num_workers" : 0
+		"num_workers" : 0,
+		"resume_training" : 0,
+		"resume_model_train" : "1",
+		"is_training" : 1,
+		"is_testing" : 0,
+		"load_model_test" : "1"
 	}
 }
