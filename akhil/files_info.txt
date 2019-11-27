@@ -1,0 +1,32 @@
+Prerequisite files:
+
+1) MSCOCO
+    go to: http://cocodataset.org/#download
+
+    download and unzip:
+    - 2014 Train images
+    - 2014 Val images
+    - 2014 Train/Val annotations
+
+    have this file structure and directories:
+    ./data/COCO/annotations/ --> all .json files
+    ./data/COCO/train2014/ --> all train images
+    ./data/COCO/val2014/ --> all test (val) images
+    ./output/COCO
+
+2) Flickr30k
+    go to: http://shannon.cs.illinois.edu/DenotationGraph/data/index.html
+
+    download and unzip:
+    - Flickr 30k images
+    - Publicly Distributable Version of the Flickr 30k Dataset
+      (tokenized captions only)
+
+    rename:
+    - flickr30k-images --> train
+    - results_20130124.token --> captions.tsv
+
+    have this file structure and directories:
+    ./data/Flickr/annotations/captions.tsv
+    ./data/Flickr/train
+    ./output/Flickr

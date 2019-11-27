@@ -1,0 +1,40 @@
+{
+	"MSCOCO" : {
+		"data_dir" : "./data/COCO",
+		"output_dir" : "./output/COCO",
+		"train_ann_path" : "annotations/captions_train2014.json",
+		"test_ann_path" : "annotations/captions_val2014.json",
+		"vocabulary_path" : "vocab.pkl",
+		"train_img_dir" : "train2014",
+		"test_img_dir" : "val2014",
+		"vocab_threshold" : 5,
+		"embedding_length" : 256,
+		"num_hidden_units" : 512,
+		"lr" : 0.01,
+		"momentum" : 0.9,
+		"num_epochs" : 100,
+		"num_layers" : 5,
+		"batch_size" : 32,
+		"shuffle" : 1,
+		"num_workers" : 0 
+	},
+	"Flickr" : {
+		"data_dir" : "./data/Flickr",
+		"output_dir" : "./output/Flickr",
+		"train_ann_path" : "annotations/captions.tsv",
+		"test_ann_path" : "",
+		"vocabulary_path" : "vocab.pkl",
+		"train_img_dir" : "train",
+		"test_img_dir" : "train",
+		"vocab_threshold" : 5,
+		"embedding_length" : 256,
+		"num_hidden_units" : 512,
+		"lr" : 0.01,
+		"momentum" : 0.9,
+		"num_epochs" : 100,
+		"num_layers" : 5,
+		"batch_size" : 32,
+		"shuffle" : 1,
+		"num_workers" : 0
+	}
+}
