@@ -1,14 +1,17 @@
 # The core part of code was taken from https://github.com/tylin/coco-caption
+# and https://github.com/mtanti/coco-caption
 
 import copy
-#import sys, re 
+#import re 
 import math, os
 from collections import defaultdict
 import numpy as np
 #import pdb
 import subprocess
 import threading
-import tempfile
+#import tempfile
+#import sys
+
 #import itertools
 
 def bleu_precook(s, n=4):
@@ -307,7 +310,7 @@ class Bleu:
             bleu_scorer += (hypo[0], ref)
 
         #score, scores = bleu_scorer.compute_score(option='shortest')
-        score, scores = bleu_scorer.compute_score(option='closest', verbose=1)
+        score, scores = bleu_scorer.compute_score(option='closest', verbose=0)
         #score, scores = bleu_scorer.compute_score(option='average', verbose=1)
 
         # return (bleu, bleu_info)
@@ -504,23 +507,25 @@ class Cider:
 # Assumes meteor-1.5.jar is in the same directory as meteor.py.  Change as needed.
 METEOR_JAR = 'meteor-1.5.jar'
 # print METEOR_JAR
-
 class Meteor:
 
     def __init__(self):
+        self.env = os.environ
+        self.env['LC_ALL'] = 'en_US.UTF_8'
         self.meteor_cmd = ['java', '-jar', '-Xmx2G', METEOR_JAR, \
                 '-', '-', '-stdio', '-l', 'en', '-norm']
         self.meteor_p = subprocess.Popen(self.meteor_cmd, \
                 cwd=os.path.dirname(os.path.abspath(__file__)), \
                 stdin=subprocess.PIPE, \
                 stdout=subprocess.PIPE, \
-                stderr=subprocess.PIPE)
+                stderr=subprocess.PIPE,
+                env=self.env, universal_newlines=True, bufsize=1)
         # Used to guarantee thread safety
         self.lock = threading.Lock()
 
     def compute_score(self, gts, res):
         assert(gts.keys() == res.keys())
-        imgIds = gts.keys()
+        imgIds = sorted(list(gts.keys()))
         scores = []
 
         eval_line = 'EVAL'
@@ -530,40 +535,29 @@ class Meteor:
             stat = self._stat(res[i][0], gts[i])
             eval_line += ' ||| {}'.format(stat)
 
-        self.meteor_p.stdin.write('{}\n'.format(eval_line))
-        for i in range(0,len(imgIds)):
-            scores.append(float(self.meteor_p.stdout.readline().strip()))
-        score = float(self.meteor_p.stdout.readline().strip())
+        # Send to METEOR
+        self.meteor_p.stdin.write(eval_line + '\n')
+        
+        # Collect segment scores
+        for i in range(len(imgIds)):
+            score = float(self.meteor_p.stdout.readline().strip())
+            scores.append(score)
+
+        # Final score
+        final_score = float(self.meteor_p.stdout.readline().strip())
         self.lock.release()
 
-        return score, scores
+        return final_score, scores
 
     def method(self):
         return "METEOR"
 
     def _stat(self, hypothesis_str, reference_list):
         # SCORE ||| reference 1 words ||| reference n words ||| hypothesis words
-        hypothesis_str = hypothesis_str.replace('|||','').replace('  ',' ')
+        hypothesis_str = hypothesis_str.replace('|||', '').replace('  ', ' ')
         score_line = ' ||| '.join(('SCORE', ' ||| '.join(reference_list), hypothesis_str))
-        self.meteor_p.stdin.write('{}\n'.format(score_line))
+        self.meteor_p.stdin.write(score_line+'\n')
         return self.meteor_p.stdout.readline().strip()
-
-    def _score(self, hypothesis_str, reference_list):
-        self.lock.acquire()
-        # SCORE ||| reference 1 words ||| reference n words ||| hypothesis words
-        hypothesis_str = hypothesis_str.replace('|||','').replace('  ',' ')
-        score_line = ' ||| '.join(('SCORE', ' ||| '.join(reference_list), hypothesis_str))
-        self.meteor_p.stdin.write('{}\n'.format(score_line))
-        stats = self.meteor_p.stdout.readline().strip()
-        eval_line = 'EVAL ||| {}'.format(stats)
-        # EVAL ||| stats
-        self.meteor_p.stdin.write('{}\n'.format(eval_line))
-        score = float(self.meteor_p.stdout.readline().strip())
-        # bug fix: there are two values returned by the jar file, one average, and one all, so do it twice
-        # thanks for Andrej for pointing this out
-        score = float(self.meteor_p.stdout.readline().strip())
-        self.lock.release()
-        return score
  
     def __del__(self):
         self.lock.acquire()
@@ -571,6 +565,7 @@ class Meteor:
         self.meteor_p.kill()
         self.meteor_p.wait()
         self.lock.release()
+
 
 def my_lcs(string, sub):
     """
@@ -664,138 +659,72 @@ class Rouge():
     def method(self):
         return "Rouge"
 
-# path to the stanford corenlp jar
-STANFORD_CORENLP_3_4_1_JAR = 'stanford-corenlp-3.4.1.jar'
-
-# punctuations to be removed from the sentences
-PUNCTUATIONS = ["''", "'", "``", "`", "-LRB-", "-RRB-", "-LCB-", "-RCB-", \
-        ".", "?", "!", ",", ":", "-", "--", "...", ";"] 
-
-class PTBTokenizer:
-    """Python wrapper of Stanford PTBTokenizer"""
-
-    def tokenize(self, captions_for_image):
-        cmd = ['java', '-cp', STANFORD_CORENLP_3_4_1_JAR, \
-                'edu.stanford.nlp.process.PTBTokenizer', \
-                '-preserveLines', '-lowerCase']
-
-        # prepare data for PTB Tokenizer
-        final_tokenized_captions_for_image = {}
-        image_id = [k for k, v in captions_for_image.items() for _ in range(len(v))]
-        sentences = '\n'.join([c.replace('\n', ' ') for k, v in captions_for_image.items() for c in v])
-
-
-        # save sentences to temporary file 
-        path_to_jar_dirname=os.path.dirname(os.path.abspath(__file__))
-        tmp_file = tempfile.NamedTemporaryFile(delete=False, dir=path_to_jar_dirname)
-        tmp_file.write(sentences.encode())
-        tmp_file.close()
-
-        # tokenize sentence
-        cmd.append(os.path.basename(tmp_file.name))
-        p_tokenizer = subprocess.Popen(cmd, cwd=path_to_jar_dirname, \
-                stdout=subprocess.PIPE)
-        token_lines = p_tokenizer.communicate(input=sentences.rstrip())[0]
-        lines = token_lines.split('\n')
-        # remove temp file
-        os.remove(tmp_file.name)
-
-        # create dictionary for tokenized captions
-        for k, line in zip(image_id, lines):
-            if not k in final_tokenized_captions_for_image:
-                final_tokenized_captions_for_image[k] = []
-            tokenized_caption = ' '.join([w for w in line.rstrip().split(' ') \
-                    if w not in PUNCTUATIONS])
-            final_tokenized_captions_for_image[k].append(tokenized_caption)
-
-        return final_tokenized_captions_for_image
-    
-class COCOEvalCap:
-    def __init__(self, coco, cocoRes):
-        self.evalImgs = []
-        self.eval = {}
-        self.imgToEval = {}
-        self.coco = coco
-        self.cocoRes = cocoRes
-        self.params = {'image_id': coco.getImgIds()}
-
-    def evaluate(self):
-        imgIds = self.params['image_id']
-        # imgIds = self.coco.getImgIds()
-        gts = {}
-        res = {}
-        for imgId in imgIds:
-            gts[imgId] = self.coco.imgToAnns[imgId]
-            res[imgId] = self.cocoRes.imgToAnns[imgId]
-
-        print ('tokenization...')
-        tokenizer = PTBTokenizer()
-        gts  = tokenizer.tokenize(gts)
-        res = tokenizer.tokenize(res)
-        
-        print('setting up scorers...')
-        scorers = [
-            (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-            (Meteor(),"METEOR"),
-            (Rouge(), "ROUGE_L"),
-            (Cider(), "CIDEr")
-        ]
-        
-        # Compute scores
-        for scorer, method in scorers:
-            print ('computing %s score...'%(scorer.method()))
-            score, scores = scorer.compute_score(gts, res)
-            if type(method) == list:
-                for sc, scs, m in zip(score, scores, method):
-                    self.setEval(sc, m)
-                    self.setImgToEvalImgs(scs, gts.keys(), m)
-                    print ("%s: %0.3f"%(m, sc))
-            else:
-                self.setEval(score, method)
-                self.setImgToEvalImgs(scores, gts.keys(), method)
-                print ("%s: %0.3f"%(method, score))
-        self.setEvalImgs()
-
-    def setEval(self, score, method):
-        self.eval[method] = score
-
-    def setImgToEvalImgs(self, scores, imgIds, method):
-        for imgId, score in zip(imgIds, scores):
-            if not imgId in self.imgToEval:
-                self.imgToEval[imgId] = {}
-                self.imgToEval[imgId]["image_id"] = imgId
-            self.imgToEval[imgId][method] = score
-
-    def setEvalImgs(self):
-        self.evalImgs = [eval for imgId, eval in self.imgToEval.items()]
-        
-        
 
 if __name__ == "__main__":
 
-    ref_dict = dict() ## a dict from image id to a list of string sentences 
-    cand_dict = dict() ## a dict from image id to a list of string sentences
-      
-    ref_dict['img1'] = ["A large bus.",
-            "A very tall building.",
-            "A bus sitting next to a  tall building.", 
-            "What a nice day!",
-            "A dog running on the road."]   ## five reference sentences
-    ref_dict['img2'] = ["A messy bedroom.",
-            "A room in dorm.",
-            "A bed next to a shelf.", 
-            "A sunday morning.", 
-            "Girls sitting on a bed."] 
-    cand_dict['img1'] = ["A large bus"]
-    cand_dict['img2'] = ["Nothing correct"]
-    
-    
-    # check whether the keys of the two dicts are the same
-    assert set(ref_dict.keys()) == set(cand_dict.keys()), "The keys of two dicts are different!"
-    
-    # compute bleu-4 score
-    bleu = Bleu(4)
-    bleu.compute_score(ref_dict, cand_dict)
-    
+    # output format from previous parts
+    Target = [[['this', 'is', 'a', 'blue', 'and', 'white', 'bathroom', 'with', 'a', 'wall', 'sink', 'and', 'a', '<unk>', 'on', 'the', 'wall', '.']], [['a', 'man', 'in', 'a', 'wheelchair', 'and', 'another', 'sitting', 'on', 'a', 'bench', 'that', 'is', 'overlooking', 'the', 'water', '.']], [['a', 'car', 'that', 'seems', 'to', 'be', 'parked', '<unk>', 'behind', 'a', '<unk>', 'parked', 'car']], [['there', 'is', 'a', '<unk>', 'plane', 'taking', 'off', 'in', 'a', 'partly', 'cloudy', 'sky', '.']], [['an', 'airplane', 'that', 'is', ',', 'either', ',', 'landing', 'or', 'just', 'taking', 'off', '.']], [['a', 'gas', 'stove', 'next', 'to', 'a', 'stainless', 'steel', 'kitchen', 'sink', 'and', 'countertop', '.']], [['a', 'room', 'with', 'blue', 'walls', 'and', 'a', 'white', 'sink', 'and', 'door', '.']], [['a', 'blue', 'boat', 'themed', 'bathroom', 'with', 'a', 'life', '<unk>', 'on', 'the', 'wall']], [['an', 'old-fashioned', 'green', 'station', 'wagon', 'is', 'parked', 'on', 'a', 'shady', 'driveway', '.']], [['a', 'black', 'metal', 'bicycle', 'with', 'a', 'clock', 'inside', 'the', 'front', 'wheel', '.']], [['a', 'bicycle', 'replica', 'with', 'a', 'clock', 'as', 'the', 'front', 'wheel', '.']], [['a', 'black', 'honda', 'motorcycle', 'parked', 'in', 'front', 'of', 'a', 'garage', '.']], [['a', 'bathroom', 'with', 'a', 'toilet', ',', 'sink', ',', 'and', 'shower', '.']], [['two', 'women', 'waiting', 'at', 'a', 'bench', 'next', 'to', 'a', 'street', '.']], [['a', 'tan', 'toilet', 'and', 'sink', 'combination', 'in', 'a', 'small', 'room', '.']], [['blue', 'and', 'white', 'color', 'scheme', 'in', 'a', 'small', 'bathroom', '.']], [['a', 'bathroom', 'with', 'walls', 'that', 'are', 'painted', 'baby', 'blue', '.']], [['a', 'long', 'empty', ',', 'minimal', 'modern', '<unk>', 'home', 'kitchen', '.']], [['an', 'office', 'cubicle', 'with', 'four', 'different', 'types', 'of', 'computers', '.']], [['a', 'black', 'honda', 'motorcycle', 'with', 'a', 'dark', 'burgundy', 'seat', '.']], [['the', 'home', 'office', 'space', 'seems', 'to', 'be', 'very', 'cluttered', '.']], [['a', 'large', 'passenger', 'airplane', 'flying', 'through', 'the', 'air', '.']], [['the', 'bike', 'has', 'a', 'clock', 'as', 'a', 'tire', '.']], [['two', 'cars', 'parked', 'on', 'the', 'sidewalk', 'on', 'the', 'street']], [['a', 'bathroom', 'sink', 'with', 'toiletries', 'on', 'the', 'counter', '.']], [['a', 'small', 'closed', 'toilet', 'in', 'a', 'cramped', 'space', '.']], [['a', 'bathroom', 'sink', 'and', 'various', 'personal', 'hygiene', 'items', '.']], [['this', 'is', 'an', 'open', 'box', 'containing', 'four', 'cucumbers', '.']], [['several', 'motorcycles', 'riding', 'down', 'the', 'road', 'in', 'formation', '.']], [['a', 'black', 'cat', 'is', 'inside', 'a', 'white', 'toilet', '.']], [['city', 'street', 'with', 'parked', 'cars', 'and', 'a', 'bench', '.']], [['a', 'honda', 'motorcycle', 'parked', 'in', 'a', 'grass', 'driveway']]]
+    Predicted = [['a', 'bathroom', 'with', 'a', 'sink', ',', 'toilet', ',', 'and', 'shower', '.'], ['a', 'man', 'sitting', 'on', 'a', 'bench', 'next', 'to', 'a', 'bicycle', '.'], ['a', 'car', 'is', 'parked', 'next', 'to', 'a', 'parking', 'meter'], ['a', 'plane', 'is', 'taking', 'off', 'from', 'the', 'runway', '.'], ['a', 'plane', 'that', 'is', 'flying', 'in', 'the', 'air', '.'], ['a', 'kitchen', 'with', 'a', 'stove', ',', 'oven', ',', 'microwave', ',', 'sink', 'and', 'a', 'refrigerator', '.'], ['a', 'bathroom', 'with', 'a', 'sink', ',', 'mirror', ',', 'and', 'hand', 'towel', '.'], ['a', 'bathroom', 'with', 'a', 'sink', ',', 'toilet', ',', 'and', 'shower', '.'], ['a', 'blue', 'car', 'with', 'a', 'surfboard', 'on', 'top', 'of', 'it', '.'], ['a', 'clock', 'is', 'shown', 'in', 'a', 'black', 'and', 'white', 'photo', '.'], ['a', 'clock', 'with', 'a', 'picture', 'of', 'a', 'clock', 'on', 'top', '.'], ['a', 'motorcycle', 'parked', 'on', 'a', 'road', 'near', 'a', 'forest', '.'], ['a', 'bathroom', 'with', 'a', 'white', 'toilet', 'and', 'a', 'white', 'sink', '.'], ['a', 'man', 'on', 'a', 'skateboard', 'is', 'performing', 'tricks'], ['a', 'bathroom', 'with', 'a', 'toilet', 'and', 'a', 'sink', '.'], ['a', 'bathroom', 'with', 'a', 'sink', ',', 'mirror', ',', 'and', 'hand', 'towel', '.'], ['a', 'bathroom', 'with', 'a', 'sink', ',', 'mirror', ',', 'and', 'hand', 'towel', '.'], ['a', 'kitchen', 'with', 'a', 'lot', 'of', 'counters', 'and', 'a', 'window', 'in', 'it'], ['a', 'living', 'room', 'with', 'a', 'couch', 'and', 'a', 'table'], ['a', 'motorcycle', 'with', 'a', 'helmet', 'on', 'sitting', 'on', 'a', 'motorcycle', '.'], ['a', 'desk', 'with', 'two', 'monitors', 'and', 'a', 'keyboard'], ['a', 'plane', 'that', 'is', 'flying', 'in', 'the', 'air', '.'], ['a', 'clock', 'is', 'shown', 'in', 'a', 'group', 'on', 'a', 'table', '.'], ['a', 'black', 'truck', 'is', 'parked', 'in', 'a', 'parking', 'lot', '.'], ['a', 'sink', 'with', 'a', 'mirror', 'and', 'lights', 'and', 'a', 'black', 'tiled', 'wall', '.'], ['a', 'bathroom', 'with', 'a', 'toilet', 'and', 'a', 'sink', '.'], ['a', 'bathroom', 'with', 'a', 'sink', ',', 'mirror', ',', 'and', 'other', 'bathroom', 'items', '.'], ['a', 'couple', 'of', 'knives', 'are', 'stacked', 'on', 'a', 'table', '.'], ['a', 'group', 'of', 'bikers', 'riding', 'down', 'a', 'street', '.'], ['a', 'black', 'cat', 'is', 'standing', 'on', 'a', 'toilet', 'seat'], ['a', 'black', 'truck', 'is', 'parked', 'in', 'a', 'parking', 'lot', '.'], ['a', 'motorcycle', 'with', 'a', 'helmet', 'on', 'sitting', 'on', 'a', 'motorcycle', '.']]
 
- 
+    # transform to dicts from image id to a list of string sentences 
+    transformed_target = {}
+    transformed_predicted = {}
+    for i in range(len(Target)):
+        transformed_target[i] = []
+        for target_sentence in Target[i]:
+            transformed_target[i].append(' '.join(target_sentence))
+        transformed_predicted[i] = [' '.join(Predicted[i])]
+        
+    # set up scorers     
+    scorers = [
+        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        (Cider(), "CIDEr"),
+        (Rouge(), "ROUGE_L"),
+        (Meteor(),"METEOR")
+    ]
+    
+    # compute scores
+    evalImgs = []
+    eval = {}
+    imgToEval = {}
+    imgIds = transformed_target.keys()
+    for scorer, method in scorers:
+        print ('computing %s score...'%(scorer.method()))
+        score, scores = scorer.compute_score(transformed_target, transformed_predicted)
+        if type(method) == list:
+            for sc, scs, m in zip(score, scores, method):
+                #self.setEval(sc, m)
+                eval[m] = sc
+                #self.setImgToEvalImgs(scs, gts.keys(), m)
+                for imgId, score in zip(imgIds, scs):
+                    if not imgId in imgToEval:
+                        imgToEval[imgId] = {}
+                        imgToEval[imgId]["image_id"] = imgId
+                        imgToEval[imgId][m] = score
+                print ("%s: %0.3f"%(m, sc))
+        else:
+            #self.setEval(score, method)
+            eval[method] = score
+            #self.setImgToEvalImgs(scores, gts.keys(), method)
+            for imgId, score in zip(imgIds, scores):
+                if not imgId in imgToEval:
+                    imgToEval[imgId] = {}
+                    imgToEval[imgId]["image_id"] = imgId
+                    imgToEval[imgId][method] = score
+            print ("%s: %0.3f"%(method, score))
+    #self.setEvalImgs()
+    evalImgs = [eval for imgId, eval in imgToEval.items()]
+            
+    '''Output:
+    computing Bleu score...
+    Bleu_1: 0.391
+    Bleu_2: 0.208
+    Bleu_3: 0.119
+    Bleu_4: 0.067
+    computing CIDEr score...
+    CIDEr: 0.277
+    computing Rouge score...
+    ROUGE_L: 0.325
+    computing METEOR score...
+    METEOR: 0.110
+    '''
