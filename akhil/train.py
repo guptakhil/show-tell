@@ -19,6 +19,9 @@ from datetime import datetime
 import time
 from collections import Counter
 from pycocotools.coco import COCO
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import SmoothingFunction
 import argparse
 import json
 
@@ -87,7 +90,7 @@ def create_batch(data):
 
 	return images, target_captions, caption_len
 
-def get_data_loader(vocab, params):
+def get_data_loader(vocab, params, run_type):
 	'''
 	Function to load the required dataset in batches.
 	'''
@@ -98,11 +101,38 @@ def get_data_loader(vocab, params):
 								tf.ToTensor(),
 								tf.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
-	dataset = MSCOCO(params['ann_path'], params['data_path'], vocab, data_transform)
-	data_loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=params['batch_size'], 
-											shuffle=params['shuffle'], num_workers=params['num_workers'], 
-											drop_last=True, collate_fn=create_batch)
+	if run_type == 'train':
+		dataset = MSCOCO(params['ann_path_train'], params['data_path_test'], vocab, data_transform)
+		data_loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=params['batch_size'], 
+												shuffle=params['shuffle'], num_workers=params['num_workers'], 
+												drop_last=True, collate_fn=create_batch)
+	elif run_type == 'test':
+		dataset = MSCOCO(params['ann_path_test'], params['data_path_test'], vocab)
+		data_loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=params['batch_size'],
+												shuffle=False, num_workers=params['num_workers'],
+												collate_fn=create_batch)
+	else:
+		raise ValueError('Please specify a valid run type for data loader. %s doesn\' exist.'%(run_type))
+
 	return data_loader
+
+def create_caption_word_format(tokenized, vocab, flag_blue=False):
+	'''
+	Function to convert the tokenized version of sentence to a sentence with words from the vocabulary.
+	'''
+
+	start_word = [vocab.word_to_index[word] for word in [vocab.start_token()]]
+	end_word = lambda idx: vocab.index_to_word[idx] != vocab.end_token()
+
+	caption_words = []
+	for idx in takewhile(end_word, tokenized):
+		if idx not in start_word:
+			caption_words.append(vocab.index_to_word[idx])
+
+	if flag_blue:
+		return [[caption_words]]
+	else:
+		return [caption_words]
 
 class ResNet(nn.Module):
 	'''
@@ -251,6 +281,48 @@ def train_model(data_loader, optimizer, cnn, rnn, loss_function, params, resume_
 		print("Epoch %d - %0.4f loss, %.2f time. " %(epoch + 1, np.mean(train_loss), time.time() - start))
 		create_checkpoint(cnn, rnn, optimizer, epoch + 1, idx + 1, train_loss, params)
 
+def test_model(data_loader, optimizer, cnn, rnn, loss_function, params, vocab, load_model):
+	'''
+	Test the model.
+	'''
+	state_dict = torch.load(os.path.join(params['output_dir'], load_model))
+	cnn.load_state_dict(state_dict['cnn_state_dict'])
+	rnn.load_state_dict(state_dict['rnn_state_dict'])
+	optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+
+	cnn.eval()
+	rnn.eval()
+
+	test_loss = []
+	bleu1 = []
+	bleu4 = []
+
+	for idx, (image, caption, caption_len) in enumerate(data_loader, start = 0):
+		image = Variable(image).cuda()
+		caption = Variable(caption).cuda()
+		target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
+		cnn_feature = cnn(image)
+		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len)
+		loss = loss_function(rnn_tokenized_sentence, target_caption)
+		test_loss.append(loss.data.item())
+
+		rnn_tokenized_sentence_prediction = rnn.sentence_index(cnn_feature)
+		rnn_tokenized_sentence_prediction = rnn_tokenized_sentence_prediction.cpu().data.numpy()
+		predicted_words = create_caption_word_format(rnn_tokenized_sentence_prediction, vocab, False)
+
+		original_sentence_tokenized = caption.cpu().data.numpy()
+		target_words = create_caption_word_format(original_sentence_tokenized, vocab, True)
+
+		sf = SmoothingFunction()
+		bleu1.append(corpus_bleu(target_words, predicted_words, weights=(1, 0, 0, 0), smoothing_function=sf.method4))
+		bleu4.append(corpus_bleu(target_words, predicted_words, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=sf.method4))
+
+		if (idx + 1) % 1 == 0:
+			print("Epoch %d (Step %d) - %0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLUE4." %(epoch + 1, idx + 1, loss, time.time() - start_time))
+
+	print("Epoch %d - %0.4f loss, %.2f time,  %.3f BLEU1, %.3f BLUE4." %(epoch + 1, np.mean(test_loss), time.time() - start),
+																		np.mean(bleu1), np.mean(bleu4))
+
 def main():
 
 	data_source = 'MSCOCO'
@@ -287,14 +359,17 @@ def main():
 	print("Parameters being used by the Model - ", params)
 
 	params['vocab_path'] = os.path.join(params['output_dir'], params['vocabulary_path'])
-	params['ann_path'] = os.path.join(params['data_dir'], params['train_ann_path'])
-	params['data_path'] = os.path.join(params['data_dir'], params['train_img_dir'])
+	params['ann_path_train'] = os.path.join(params['data_dir'], params['train_ann_path'])
+	params['data_path_train'] = os.path.join(params['data_dir'], params['train_img_dir'])
+	params['ann_path_test'] = os.path.join(params['data_dir'], params['test_ann_path'])
+	params['data_path_test'] = os.path.join(params['data_dir'], params['test_img_dir'])
 
 	vocab = get_vocabulary(data_source, params)
 	print('Vocabulary loaded.')
 
-	train_data_loader = get_data_loader(vocab, params)
-	print("Training data loaded.")
+	train_data_loader = get_data_loader(vocab, params, 'train')
+	test_data_loader = get_data_loader(vocab, params, 'test')
+	print("Training and testing data loaded.")
 
 	cnn = ResNet(params['resnet_version'], params['embedding_length'])
 	rnn = RNN(params['embedding_length'], params['num_hidden_units'], len(vocab), params['num_layers'])
@@ -320,6 +395,10 @@ def main():
 		params['state_dict'] = os.path.join(params['output_dir'], 'model_' + str(start_epoch + 1) + '.ckpt')
 	train_model(train_data_loader, optimizer, cnn, rnn, loss_fn, params, resume_training)
 	print('Training completed.')
+
+	print('Testing started.')
+	test_model(test_data_loader, optimizer, cnn, rnn, loss_fn, params, vocab, 'model_24.ckpt')
+	print('Testing completed.')
 
 if __name__ == "__main__":
 	main()
