@@ -17,6 +17,7 @@ from vocab_builder import get_vocabulary
 from utils import MSCOCO, get_data_loader, create_caption_word_format, create_checkpoint
 from cnn import ResNet
 from rnn import RNN
+from evaluation.evaluation_metrics import evaluate
 
 from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.bleu_score import corpus_bleu
@@ -27,7 +28,7 @@ os.chdir(dir_path)
 
 random.seed(1)
 torch.manual_seed(1)
-torch.cuda.manual_seed_all(1)
+#torch.cuda.manual_seed_all(1)
 
 data_source = 'MSCOCO'
 
@@ -91,9 +92,9 @@ elif params['optimizer_type'] == 'Adam':
 else:
 	raise ValueError('Please specify a valid optimizer. %s is invalid.'%(params['optimizer_type']))
 
-cnn.cuda()
-rnn.cuda()
-loss_fn.cuda()
+cnn.cpu()
+rnn.cpu()
+loss_fn.cpu()
 print('Loaded the models to the GPU.')
 
 if params['is_training']:
@@ -117,8 +118,8 @@ if params['is_training']:
 
 		train_loss = []
 		for idx, (image, caption, caption_len) in enumerate(train_data_loader):
-			image = Variable(image).cuda()
-			caption = Variable(caption).cuda()
+			image = Variable(image).cpu()
+			caption = Variable(caption).cpu()
 			target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 			optimizer.zero_grad()
 			cnn_feature = cnn(image)
@@ -139,24 +140,33 @@ if params['is_training']:
 
 if params['is_testing']:
 	test_data_loader = get_data_loader(vocab, params, 'test')
+	print("Testing data loaded.")
 
-	state_dict = torch.load(os.path.join(params['output_dir'], params['load_model_test'] + '.ckpt'), map_location=torch.device('cuda'))
+	state_dict = torch.load(os.path.join(params['output_dir'], params['load_model_test'] + '.ckpt'), map_location=torch.device('cpu'))
 	cnn.load_state_dict(state_dict['encoder_state_dict'])
 	rnn.load_state_dict(state_dict['decoder_state_dict'])
 	optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+	print("Model loaded.")
 
 	cnn.eval()
 	rnn.eval()
 
 	test_loss = []
+	bleu1_corpus = []
+	bleu4_corpus = []
 	bleu1 = []
+	bleu2 = []
+	bleu3 = []
 	bleu4 = []
+	cider = []
+	rouge = []
 
 	start_time = time.time()
 	print('Testing started.')
+	print("Total steps to be taken - %d\n"%(len(test_data_loader)))
 	for idx, (image, caption, caption_len) in enumerate(test_data_loader, start = 0):
-		image = Variable(image).cuda()
-		caption = Variable(caption).cuda()
+		image = Variable(image).cpu()
+		caption = Variable(caption).cpu()
 		target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 		cnn_feature = cnn(image)
 		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len)
@@ -170,12 +180,25 @@ if params['is_testing']:
 		original_sentence_tokenized = caption.cpu().data.numpy()
 		target_words = create_caption_word_format(original_sentence_tokenized, vocab, True)
 
+		eval_scores = evaluate(target_words, predicted_words)
+
 		sf = SmoothingFunction()
-		bleu1.append(corpus_bleu(target_words, predicted_words, weights=(1, 0, 0, 0), smoothing_function=sf.method4))
-		bleu4.append(corpus_bleu(target_words, predicted_words, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=sf.method4))
+		bleu1_corpus.append(corpus_bleu(target_words, predicted_words, weights=(1, 0, 0, 0), smoothing_function=sf.method4))
+		bleu4_corpus.append(corpus_bleu(target_words, predicted_words, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=sf.method4))
+		bleu1.append(eval_scores['Bleu_1'])
+		bleu2.append(eval_scores['Bleu_2'])
+		bleu3.append(eval_scores['Bleu_3'])
+		bleu4.append(eval_scores['Bleu_4'])
+		cider.append(eval_scores['CIDEr'])
+		rouge.append(eval_scores['ROUGE_L'])
+
+		assert round(bleu1_corpus[-1], 3) == round(bleu1[-1], 3)
+		assert round(bleu4_corpus[-1], 3) == round(bleu4[-1], 3)
 
 		if (idx + 1) % 1 == 0:
-			print("Step %d - %0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLUE4." %(idx + 1, loss, time.time() - start_time, np.mean(bleu1)*100.0, np.mean(bleu4)*100.0))
+			print("Step %d - %0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLEU2, %.3f BLEU3, %.3f BLEU4, %.3f CIDEr, %.3f ROUGE_L." %(idx + 1, loss, time.time() - start_time, 
+					np.mean(bleu1)*100.0, np.mean(bleu2)*100.0, np.mean(bleu3)*100.0, np.mean(bleu4)*100.0, np.mean(cider)*100.0, np.mean(rouge)*100.0))
 
-	print("%0.4f loss, %.2f time,  %.3f BLEU1, %.3f BLUE4." %(np.mean(test_loss), time.time() - start), np.mean(bleu1)*100.0, np.mean(bleu4)*100.0)
+	print("%0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLEU2, %.3f BLEU3, %.3f BLEU4, %.3f CIDEr, %.3f ROUGE_L." %(np.mean(test_loss), time.time() - start_time, 
+					np.mean(bleu1)*100.0, np.mean(bleu2)*100.0, np.mean(bleu3)*100.0, np.mean(bleu4)*100.0, np.mean(cider)*100.0, np.mean(rouge)*100.0))
 	print('Testing completed.')
