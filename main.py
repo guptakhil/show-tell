@@ -28,7 +28,7 @@ os.chdir(dir_path)
 
 random.seed(1)
 torch.manual_seed(1)
-#torch.cuda.manual_seed_all(1)
+torch.cuda.manual_seed_all(1)
 
 data_source = 'MSCOCO'
 
@@ -92,9 +92,9 @@ elif params['optimizer_type'] == 'Adam':
 else:
 	raise ValueError('Please specify a valid optimizer. %s is invalid.'%(params['optimizer_type']))
 
-cnn.cpu()
-rnn.cpu()
-loss_fn.cpu()
+cnn.cuda()
+rnn.cuda()
+loss_fn.cuda()
 print('Loaded the models to the GPU.')
 
 if params['is_training']:
@@ -118,8 +118,8 @@ if params['is_training']:
 
 		train_loss = []
 		for idx, (image, caption, caption_len) in enumerate(train_data_loader):
-			image = Variable(image).cpu()
-			caption = Variable(caption).cpu()
+			image = Variable(image).cuda()
+			caption = Variable(caption).cuda()
 			target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 			optimizer.zero_grad()
 			cnn_feature = cnn(image)
@@ -142,7 +142,7 @@ if params['is_testing']:
 	test_data_loader = get_data_loader(vocab, params, 'test')
 	print("Testing data loaded.")
 
-	state_dict = torch.load(os.path.join(params['output_dir'], params['load_model_test'] + '.ckpt'), map_location=torch.device('cpu'))
+	state_dict = torch.load(os.path.join(params['output_dir'], params['load_model_test'] + '.ckpt'), map_location=torch.device('cuda'))
 	cnn.load_state_dict(state_dict['encoder_state_dict'])
 	rnn.load_state_dict(state_dict['decoder_state_dict'])
 	optimizer.load_state_dict(state_dict['optimizer_state_dict'])
@@ -165,8 +165,8 @@ if params['is_testing']:
 	print('Testing started.')
 	print("Total steps to be taken - %d\n"%(len(test_data_loader)))
 	for idx, (image, caption, caption_len) in enumerate(test_data_loader, start = 0):
-		image = Variable(image).cpu()
-		caption = Variable(caption).cpu()
+		image = Variable(image).cuda()
+		caption = Variable(caption).cuda()
 		target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 		cnn_feature = cnn(image)
 		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len)
@@ -195,7 +195,7 @@ if params['is_testing']:
 		assert round(bleu1_corpus[-1], 3) == round(bleu1[-1], 3)
 		assert round(bleu4_corpus[-1], 3) == round(bleu4[-1], 3)
 
-		if (idx + 1) % 1 == 0:
+		if (idx + 1) % 10 == 0:
 			print("Step %d - %0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLEU2, %.3f BLEU3, %.3f BLEU4, %.3f CIDEr, %.3f ROUGE_L." %(idx + 1, loss, time.time() - start_time, 
 					np.mean(bleu1)*100.0, np.mean(bleu2)*100.0, np.mean(bleu3)*100.0, np.mean(bleu4)*100.0, np.mean(cider)*100.0, np.mean(rouge)*100.0))
 
