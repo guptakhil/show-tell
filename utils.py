@@ -46,7 +46,7 @@ class MSCOCO(data.Dataset):
 		caption_tokens = nltk.tokenize.word_tokenize(str(image_caption).lower())
 		image_target_caption = torch.Tensor([self.vocab('<start>')] + [self.vocab(token) for token in caption_tokens] + [self.vocab('<end>')])
 
-		return image, image_target_caption
+		return image_path, image, image_target_caption
 
 	def __len__(self):
 		'''
@@ -59,8 +59,8 @@ def create_batch(data):
 	Function to create batches from images and the corresponding real captions.
 	'''
 
-	data.sort(key=lambda x: len(x[1]), reverse=True) # Sorting the data
-	images, captions = zip(*data) 	# Retrieving the images and their corresponding captions	
+	data.sort(key=lambda x: len(x[2]), reverse=True) # Sorting the data # x[1]
+	image_paths, images, captions = zip(*data) 	# Retrieving the images and their corresponding captions	
 	images = torch.stack(images, 0) # Stacking the images together
 	caption_len = [len(caption) for caption in captions] # Writing the lengths of the image captions to a list
 
@@ -70,7 +70,7 @@ def create_batch(data):
 		caption_end = caption_len[idx]
 		target_captions[idx, : caption_end] = image_caption[ : caption_end]
 
-	return images, target_captions, caption_len
+	return image_paths, images, target_captions, caption_len
 
 def get_data_loader(vocab, params, run_type):
 	'''
@@ -89,7 +89,7 @@ def get_data_loader(vocab, params, run_type):
 												shuffle=params['shuffle'], num_workers=params['num_workers'], 
 												drop_last=True, collate_fn=create_batch)
 	elif run_type == 'test':
-		dataset = MSCOCO(params['ann_path_test'], params['data_path_test'], vocab, data_transform)
+		dataset = MSCOCO(params['ann_path_test'], params['data_path_test'], vocab, data_transform) # Test
 		data_loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=params['batch_size'],
 												shuffle=False, num_workers=params['num_workers'],
 												collate_fn=create_batch)
