@@ -12,6 +12,7 @@ import random
 import time
 import argparse
 import json
+import pickle
 
 from vocab_builder import get_vocabulary
 from utils import MSCOCO, get_data_loader, create_caption_word_format, create_checkpoint
@@ -138,8 +139,6 @@ if params['is_training']:
 
 	print('Training completed.')
 
-import pickle
-
 if params['is_testing']:
 	test_data_loader = get_data_loader(vocab, params, 'test')
 	print("Testing data loaded.")
@@ -187,8 +186,6 @@ if params['is_testing']:
 		target_words = create_caption_word_format(original_sentence_tokenized, vocab, True)
 
 		eval_scores = evaluate(target_words, predicted_words)
-		#*print('Target words shape: ' + str(caption.size()))
-		#*print('Target words: ' + str(target_words))
 		for imgs, tgt, pdt in zip(img_paths, target_words, predicted_words):
 			if imgs in target_caption_full.keys():
 				target_caption_full[imgs].extend(tgt)
@@ -199,8 +196,6 @@ if params['is_testing']:
 				candidate_caption_full[imgs].append(pdt)
 
 		sf = SmoothingFunction()
-		#*bleu1_corpus.append(corpus_bleu(target_words, predicted_words, weights=(1, 0, 0, 0), smoothing_function=sf.method4))
-		#*bleu4_corpus.append(corpus_bleu(target_words, predicted_words, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=sf.method4))
 		bleu1.append(eval_scores['Bleu_1'])
 		bleu2.append(eval_scores['Bleu_2'])
 		bleu3.append(eval_scores['Bleu_3'])
@@ -208,20 +203,12 @@ if params['is_testing']:
 		cider.append(eval_scores['CIDEr'])
 		rouge.append(eval_scores['ROUGE_L'])
 
-		#*assert round(bleu1_corpus[-1], 3) == round(bleu1[-1], 3)
-		#*assert round(bleu4_corpus[-1], 3) == round(bleu4[-1], 3)
-
-		if (idx + 1) % 100 == 0: # 10
+		if (idx + 1) % 100 == 0:
 			print("Step %d - %0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLEU2, %.3f BLEU3, %.3f BLEU4, %.3f CIDEr, %.3f ROUGE_L." %(idx + 1, loss, time.time() - start_time, 
 					np.mean(bleu1)*100.0, np.mean(bleu2)*100.0, np.mean(bleu3)*100.0, np.mean(bleu4)*100.0, np.mean(cider)*100.0, np.mean(rouge)*100.0))
-			#*print('Image Names: ' + str(img_paths))
-		#*if idx == 500: break
 
 	print("%0.4f test loss, %0.2f time, %.3f BLEU1, %.3f BLEU2, %.3f BLEU3, %.3f BLEU4, %.3f CIDEr, %.3f ROUGE_L." %(np.mean(test_loss), time.time() - start_time, 
 					np.mean(bleu1)*100.0, np.mean(bleu2)*100.0, np.mean(bleu3)*100.0, np.mean(bleu4)*100.0, np.mean(cider)*100.0, np.mean(rouge)*100.0))
-	#*print('Target Caption Full: ' + str(target_caption_full))
-	#*print('Candidate Caption Full: ' + str(candidate_caption_full))
-	print('Testing completed.')
 	# Save the outputs to file
 	with open(os.path.join(params['output_dir'], 'Target_Words_Dict.pickle'), 'wb') as f:
 		pickle.dump(target_caption_full, f)
@@ -237,14 +224,12 @@ if params['is_testing']:
 			b2 += corpus_bleu([target_caption_full[img_nm]] , [candidate_caption_full[img_nm][j]], weights=(0.5, 0.5, 0.0, 0.0), smoothing_function=sf.method4)
 			b3 += corpus_bleu([target_caption_full[img_nm]] , [candidate_caption_full[img_nm][j]], weights=(0.34, 0.33, 0.33, 0.0), smoothing_function=sf.method4)
 			b4 += corpus_bleu([target_caption_full[img_nm]] , [candidate_caption_full[img_nm][j]], weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=sf.method4)
-		b1 /= len(candidate_caption_full[img_nm])
-		b2 /= len(candidate_caption_full[img_nm])
-		b3 /= len(candidate_caption_full[img_nm])
-		b4 /= len(candidate_caption_full[img_nm])
-		bleu1_corpus.append(b1)
-		bleu2_corpus.append(b2)
-		bleu3_corpus.append(b3)
-		bleu4_corpus.append(b4)
+		bleu1_corpus.append(b1/len(candidate_caption_full[img_nm]))
+		bleu2_corpus.append(b2/len(candidate_caption_full[img_nm]))
+		bleu3_corpus.append(b3/len(candidate_caption_full[img_nm]))
+		bleu4_corpus.append(b4/len(candidate_caption_full[img_nm]))
 
-	print("%0.4f test loss, %0.2f time, %.3f New_BLEU1, %.3f New_BLEU2, %.3f New_BLEU3, %.3f New_BLEU4" % (np.mean(test_loss), time.time() - start_time, 
+	print("%0.4f test loss, %0.2f time, %.3f Final BLEU1, %.3f Final BLEU2, %.3f Final BLEU3, %.3f Final BLEU4" % (np.mean(test_loss), time.time() - start_time, 
 					np.mean(np.array(bleu1_corpus))*100.0, np.mean(np.array(bleu2_corpus))*100.0, np.mean(np.array(bleu3_corpus))*100.0, np.mean(np.array(bleu4_corpus))*100.0))
+
+	print('Testing completed.')
