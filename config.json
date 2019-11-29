@@ -21,7 +21,9 @@
 		"resume_model_train" : "model_1",
 		"is_training" : 1,
 		"is_testing" : 0,
-		"load_model_test" : "model_50"
+		"load_model_test" : "model_50",
+		"device" : "gpu",
+		"sub_batch_test" : 10
 	},
 	"Flickr" : {
 		"data_dir" : "./data/Flickr",
@@ -45,6 +47,8 @@
 		"resume_model_train" : "1",
 		"is_training" : 1,
 		"is_testing" : 0,
-		"load_model_test" : "1"
+		"load_model_test" : "1",
+		"device" : "gpu",
+		"sub_batch_test" : 10
 	}
 }
