@@ -149,7 +149,7 @@ if params['is_training']:
 			if (idx + 1) % 500 == 0 or (idx + 1) == len(train_data_loader):
 				print("Epoch %d (Step %d) - %0.4f train loss, %0.2f time." %(epoch + 1, idx + 1, loss, time.time() - start_time))
 
-		print("Epoch %d - %0.4f loss, %.2f time. " %(epoch + 1, np.mean(train_loss), time.time() - start))
+		print("Epoch %d - %0.4f loss, %.2f time. " %(epoch + 1, np.mean(train_loss), time.time() - start_time))
 		create_checkpoint(cnn, rnn, optimizer, epoch + 1, idx + 1, train_loss, params)
 
 		if (epoch + 1) % 5 == 0:
