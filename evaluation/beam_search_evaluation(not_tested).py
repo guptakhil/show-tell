@@ -4,10 +4,7 @@ def int_to_word(integer, tokenizer):
 			return word
 	return None
 
-"""
-	*Generate a caption for an image, given a pre-trained model and a tokenizer to map integer back to word
-	*Uses simple argmax
-"""
+
 
 def generate_caption_beam_search(model, tokenizer, image, max_length, beam_index=3):
 	# in_text --> [[idx,prob]] ;prob=0 initially
