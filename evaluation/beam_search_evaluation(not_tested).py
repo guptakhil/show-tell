@@ -1,3 +1,39 @@
+def int_to_word(integer, tokenizer):
+	for word, index in tokenizer.word_index.items():
+		if index == integer:
+			return word
+	return None
+
+"""
+	*Generate a caption for an image, given a pre-trained model and a tokenizer to map integer back to word
+	*Uses simple argmax
+"""
+def generate_caption(model, tokenizer, image, max_length):
+	# Seed the generation process
+	in_text = 'startseq'
+	# Iterate over the whole length of the sequence
+	for _ in range(max_length):
+		# Integer encode input sequence
+		sequence = tokenizer.texts_to_sequences([in_text])[0]
+		# Pad input
+		sequence = pad_sequences([sequence], maxlen=max_length)
+		# Predict next word
+		# The model will output a prediction, which will be a probability distribution over all words in the vocabulary.
+		yhat = model.predict([image,sequence], verbose=0)
+		# The output vector representins a probability distribution where maximum probability is the predicted word position
+		# Take output class with maximum probability and convert to integer
+		yhat = np.argmax(yhat)
+		# Map integer back to word
+		word = int_to_word(yhat, tokenizer)
+		# Stop if we cannot map the word
+		if word is None:
+			break
+		# Append as input for generating the next word
+		in_text += ' ' + word
+		# Stop if we predict the end of the sequence
+		if word == 'endseq':
+			break
+	return in_text
 def generate_caption_beam_search(model, tokenizer, image, max_length, beam_index=3):
 	# in_text --> [[idx,prob]] ;prob=0 initially
 	in_text = [[tokenizer.texts_to_sequences(['startseq'])[0], 0.0]]
