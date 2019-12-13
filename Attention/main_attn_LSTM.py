@@ -16,7 +16,7 @@ import json
 from vocab_builder import get_vocabulary
 from utils import MSCOCO, get_data_loader, create_caption_word_format, create_checkpoint
 from cnn_attn import ResNet
-from rnn_attn import RNN_Attn as RNN # rnn_attn
+from rnn_attn_LSTM import RNN_Attn as RNN # rnn_attn
 from evaluation.evaluation_metrics import evaluate
 
 from nltk.translate.bleu_score import sentence_bleu
