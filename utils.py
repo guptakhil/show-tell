@@ -144,7 +144,7 @@ def create_checkpoint(cnn, rnn, optimizer, epoch, step, train_loss, params):
 		os.path.join(params['output_dir'], metrics_file))
 	print("Checkpoint created for Epoch %d (Step %d)."%(epoch, step))
 
-def test_model(cnn, rnn, optimizer, loss_function, data_loader, vocab, params, model_name_load, device, sub_batch_size=-1):
+def test_model(cnn, rnn, optimizer, loss_function, data_loader, vocab, params, model_name_load, device, sub_batch_size=-1, beam_size=0):
 	'''
 	Function to test the model
 	'''
@@ -191,7 +191,7 @@ def test_model(cnn, rnn, optimizer, loss_function, data_loader, vocab, params, m
 		loss = loss_function(rnn_tokenized_sentence, target_caption)
 		test_loss.append(loss.data.item())
 
-		rnn_tokenized_sentence_prediction = rnn.sentence_index(cnn_feature)
+		rnn_tokenized_sentence_prediction = rnn.sentence_index(cnn_feature, beam_size)
 		rnn_tokenized_sentence_prediction = rnn_tokenized_sentence_prediction.cpu().data.numpy()
 		predicted_words = create_caption_word_format(rnn_tokenized_sentence_prediction, vocab, False)
 
