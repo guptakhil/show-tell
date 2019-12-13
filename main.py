@@ -79,7 +79,7 @@ if params['device'] == 'gpu':
 	torch.cuda.manual_seed_all(1)
     
 if params['beam_size'] > 0:
-    params['batch_size'] = 1
+	params['batch_size'] = 1
 
 vocab = get_vocabulary(data_source, params)
 print('Vocabulary loaded.')
