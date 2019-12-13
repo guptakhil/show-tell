@@ -61,6 +61,9 @@ parser.add_argument('--is_testing', type=int, default=config['is_testing'], help
 parser.add_argument('--load_model_test', type=str, default=config['load_model_test'], help="model number for inference")
 parser.add_argument('--device', type=str, default=config['device'], help="device to be used - gpu/cpu")
 parser.add_argument('--sub_batch_test', type=int, default=config['sub_batch_test'], help="Number of mini-batches to be used from test while training")
+parser.add_argument('--beam_size', type=int, default=0, help="Beam size in testing")
+
+
 
 obj = parser.parse_args()
 params = vars(obj)
@@ -74,6 +77,9 @@ params['data_path_test'] = os.path.join(params['data_dir'], params['test_img_dir
 
 if params['device'] == 'gpu':
 	torch.cuda.manual_seed_all(1)
+    
+if params['beam_size'] > 0:
+    params['batch_size'] = 1
 
 vocab = get_vocabulary(data_source, params)
 print('Vocabulary loaded.')
@@ -167,4 +173,4 @@ if params['is_testing']:
 	cnn.eval()
 	rnn.eval()
 	print("Steps to be taken - %d\n"%(len(test_data_loader)))
-	test_model(cnn, rnn, optimizer, loss_fn, test_data_loader, vocab, params, params['load_model_test'], params['device'], -1)
+	test_model(cnn, rnn, optimizer, loss_fn, test_data_loader, vocab, params, params['load_model_test'], params['device'], -1, params['beam_size'])
