@@ -42,7 +42,10 @@ class RNN(torch.nn.Module):
 
 		for idx in range(caption_max_size):
 
-			next_state, (rnn_hidden_state_h, rnn_hidden_state_c) = self.unit(rnn_data, (rnn_hidden_state_h, rnn_hidden_state_c))
+			if idx == 0:
+				next_state, (rnn_hidden_state_h, rnn_hidden_state_c) = self.unit(rnn_data, None)
+			else:
+				next_state, (rnn_hidden_state_h, rnn_hidden_state_c) = self.unit(rnn_data, (rnn_hidden_state_h, rnn_hidden_state_c))
 			result_state = self.linear(next_state.squeeze(1))
 			predicted_tokenized_word = result_state.max(1)[1]
 			predicted_sentence_idx.append(predicted_tokenized_word)
