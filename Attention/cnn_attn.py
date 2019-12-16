@@ -41,7 +41,7 @@ class ResNet(nn.Module):
 		self.linear_secondlast_layer.weight.data.normal_(0, 0.05)
 		self.last_layer.bias.data.fill_(0)
 
-	def forward(self, x):
+	def forward(self, x): # Extract CNN features with spatial resolution preserved
 
 		x = self.model(x)
 		x = Variable(x.data) # Converting to a PyTorch variable
