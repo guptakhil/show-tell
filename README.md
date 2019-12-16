@@ -22,5 +22,10 @@ Done as part of the Course Project for IE-534/CS-547 (Deep Learning).
 - scipy            1.3.1 
 - six              1.13.0
 - torchvision      0.3.0
+- nltk
+
+### Dataset Pre-processing
+First download the COCO training and validation datasets
 
 ### Execution Instruction :
+In order to execute the code 
