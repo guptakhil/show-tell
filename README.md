@@ -31,6 +31,6 @@ First download the COCO [training](https://images.cocodataset.org/zips/train2014
 
 ### Execution Instruction :
 The code has three main components:
-..* The GRU based model
-..* The LSTM based model
-..* The Attention based model
+* The GRU based model
+* The LSTM based model
+* The Attention based model
