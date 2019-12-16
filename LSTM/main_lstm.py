@@ -176,7 +176,7 @@ if params['is_testing']:
 		target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 		cnn_feature = cnn(image)
 		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len)
-		loss = loss_fn(rnn_tokenized_sentence, target_caption)
+		loss = loss_fn(rnn_tokenized_sentence, target_caption) # Teacher forced loss
 		test_loss.append(loss.data.item())
 
 		rnn_tokenized_sentence_prediction = rnn.sentence_index(cnn_feature)
