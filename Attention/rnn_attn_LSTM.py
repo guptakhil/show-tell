@@ -58,16 +58,16 @@ class RNN_Attn(nn.Module):
 		# Define the Embedding Mapping
 		self.embed = nn.Linear(nos_filters, embed_dim)
 
-	def rnn_iterator(self, caption_embedding, caption_size, cnn_feature, is_train=True):
+	def rnn_iterator(self, caption_embedding, caption_size, cnn_feature, is_train=True): # Core module for forward pass
 		batch_size = caption_embedding.size()[0]
 		hidden = ((self.init_h(cnn_feature.mean(dim=2))).unsqueeze(1).repeat(1, self.num_layers, 1), (self.init_c(cnn_feature.mean(dim=2))).unsqueeze(1).repeat(1, self.num_layers, 1)) # nn.LeakyReLU(negative_slope=0.2, in_place=False) ()
-		if is_train:
+		if is_train: # In the training regime
 			predictions = Variable(torch.zeros(batch_size, caption_embedding.size(1), self.vocab_size)).cuda()
 			alphas = Variable(torch.zeros(batch_size, caption_embedding.size(1), cnn_feature.size(2))).cuda()
 			for t in range(caption_embedding.size(1)): # Iterate over time
 				#*print('At time: ' + str(t))
 				batch_size_t = sum([l > t for l in caption_size]) # Number of samples in the batch with caption length > t
-				attn_feat, alpha = self.attn(cnn_feature[:batch_size_t, :, :].transpose(1, 2), hidden[0][:batch_size_t, -1, :]) # Only the hidden state of the cell is needed
+				attn_feat, alpha = self.attn(cnn_feature[:batch_size_t, :, :].transpose(1, 2), hidden[0][:batch_size_t, -1, :]) # Only the hidden state of the cell is needed to compute attention
 				_, hidden = self.unit(torch.cat([caption_embedding[:batch_size_t, t, :], self.embed(attn_feat[:batch_size_t, :])], dim=1).unsqueeze(1), \
 					(hidden[0][:batch_size_t, :, :].transpose(0, 1).contiguous(), hidden[1][:batch_size_t, :, :].transpose(0, 1).contiguous()))
 				op = self.linear(_.squeeze(1))  
@@ -76,11 +76,11 @@ class RNN_Attn(nn.Module):
 				hidden = (hidden[0].transpose(0, 1), hidden[1].transpose(0, 1)) # Move batch to the first dimension again
 
 			return predictions, alphas
-		else:
+		else: # In the testing regime
 			predicted_sentence_idx = []
 			for t in range(self.cap_max_size): # Iterate over time
 				#*print('At word prediction time: ' + str(t))
-				attn_feat, __ = self.attn(cnn_feature.transpose(1, 2), hidden[0][:, -1, :])
+				attn_feat, __ = self.attn(cnn_feature.transpose(1, 2), hidden[0][:, -1, :])  # Only the hidden state of the cell is needed to compute attention
 				#*if t == 0:
 				_, hidden = self.unit(torch.cat([caption_embedding[:, 0, :], self.embed(attn_feat[:, :])], dim=1).unsqueeze(1), \
 					(hidden[0].transpose(0, 1).contiguous(), hidden[1].transpose(0, 1).contiguous()))
@@ -98,7 +98,7 @@ class RNN_Attn(nn.Module):
 
 		return 
 
-	def forward(self, cnn_feature, image_caption, caption_size):
+	def forward(self, cnn_feature, image_caption, caption_size): # Forward routine when cross-entropy loss is desired
 
 		#*print('Shape of Caption Embedding is: ' + str(image_caption.size()))
 		caption_embedding = self.embeddings(image_caption)
@@ -120,7 +120,7 @@ class RNN_Attn(nn.Module):
 
 		return tokenized_predicted_sentence, alphas
 
-	def sentence_index(self, cnn_feature, vocab):
+	def sentence_index(self, cnn_feature, vocab):# Forward routine when word prediction is desired
 
 		#*caption_max_size = 25 
 		#*rnn_hidden_state = None
