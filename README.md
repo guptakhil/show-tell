@@ -24,13 +24,15 @@ Done as part of the Course Project for IE-534/CS-547 (Deep Learning).
 - torchvision      0.3.0
 - nltk
 
---* Clone this repository 
+* Clone this repository 
 
 ### Dataset Pre-processing
 First download the COCO [training](https://images.cocodataset.org/zips/train2014.zip) and [validation](https://images.cocodataset.org/zips/val2014.zip) image sets and the [annotation](images.cocodataset.org/annotations/annotations_trainval2014.zip) files as well. Extract and keep them in a folder called COCO. This folder is our data folder.
 
 ### Execution Instruction :
-The code has three main components:
-* The GRU based model
+The code has three main components. We provide the instructions for running them here, the full choice of different arguments maybe obtained the argparse in the main files:
+* The GRU based model:
+  - Training Regime:
+  $ python main.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --embedding_length 512 --optimizer_type Adam --lr 0.0001 --num_epochs 100 --shuffle True --num_workers 16 --is_training 1 --is_testing 0
 * The LSTM based model
 * The Attention based model
