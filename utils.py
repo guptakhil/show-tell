@@ -187,8 +187,8 @@ def test_model(cnn, rnn, optimizer, loss_function, data_loader, vocab, params, m
 			raise ValueError('Please specify a valid device from ["cpu", "gpu"].')
 		target_caption = nn.utils.rnn.pack_padded_sequence(caption, caption_len, batch_first=True)[0]
 		cnn_feature = cnn(image)
-		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len)
-		loss = loss_function(rnn_tokenized_sentence, target_caption)
+		rnn_tokenized_sentence = rnn(cnn_feature, caption, caption_len) 
+		loss = loss_function(rnn_tokenized_sentence, target_caption) # Teacher forced loss
 		test_loss.append(loss.data.item())
 
 		rnn_tokenized_sentence_prediction = rnn.sentence_index(cnn_feature, beam_size)
