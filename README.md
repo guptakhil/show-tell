@@ -34,5 +34,22 @@ The code has three main components. We provide the instructions for running them
 * The GRU based model:
   - Training Regime:
   $ python main.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --embedding_length 512 --optimizer_type Adam --lr 0.0001 --num_epochs 100 --shuffle True --num_workers 16 --is_training 1 --is_testing 0
-* The LSTM based model
-* The Attention based model
+  - Testing Regime:
+  $ python main.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --load_model_test <model_name> --num_workers 16 --is_training 0 --is_testing 1
+  
+* The LSTM based model (inside the LSTM folder)
+  - Training Regime:
+  $ python main_lstm.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --embedding_length 512 --optimizer_type Adam --lr 0.0001 --num_epochs 100 --shuffle True --num_workers 16 --is_training 1 --is_testing 0
+  - Testing Regime:
+  $ python main_lstm.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --load_model_test <model_name> --num_workers 16 --is_training 0 --is_testing 1
+
+* The Attention based model (inside the Attention folder)
+  - Training Regime (GRU + Attention):
+  $ python main_attn.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --embedding_length 512 --optimizer_type Adam --lr 0.0001 --num_epochs 100 --alpha_c 1.0 --shuffle True --num_workers 16 --is_training 1 --is_testing 0
+  - Testing Regime:
+  $ python main_attn.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --load_model_test <model_name> --num_workers 16 --is_training 0 --is_testing 1
+  
+  - Training Regime (LSTM + Attention):
+  $ python main_attn_LSTM.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --embedding_length 512 --optimizer_type Adam --lr 0.0001 --num_epochs 100 --alpha_c 1.0 --shuffle True --num_workers 16 --is_training 1 --is_testing 0
+  - Testing Regime:
+  $ python main_attn_LSTM.py --data_dir <path/to/dataset/root> --output_dir <path/to/output/directory> --load_model_test <model_name> --num_workers 16 --is_training 0 --is_testing 1
